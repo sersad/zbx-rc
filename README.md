@@ -4,7 +4,7 @@ For now it's just pre-alpha version, so cannot be used.
 # zbx-rc
 Utility to send message from Zabbix into Rocket.Chat.
 ![alt](https://pp.userapi.com/c847120/v847120545/ca50d/BhNh_-7pRL4.jpg)
-Zabbix Share page: None
+Zabbix Share page: None  
 You can contact me with Telegram: @asand3r
 
 Program wrote with Python 3.6.
