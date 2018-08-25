@@ -103,42 +103,44 @@ if __name__ == '__main__':
     # Current program version
     VERSION = '0.1alpha1'
 
-    # Parse all given arguments
-    parser = ArgumentParser(description='Send messages from Zabbix to Rocket.Chat', add_help=True)
-    # Send message args
-    send_args = parser.add_argument_group('Send message')
-    send_args.add_argument('to', type=str, help='Message recipient')
-    send_args.add_argument('subject', type=str, help='Message subject')
-    send_args.add_argument('message', type=str, help='Message body text')
-    # Common args
-    common_args = parser.add_argument_group('Common')
-    common_args.add_argument('-v', '--version', action='version', version=VERSION, help='Print version number and exit')
-    common_args.add_argument('-c', '--config', type=str, default='zbx-rc.conf', help='Path to config file')
-    common_args.add_argument('--debug', action='store_true', help='Enable debug mode')
-    # Getting token args
-    auth_args = parser.add_argument_group('Authentication')
-    auth_args.add_argument('--get-token', action='store_true', help='Get auth token and user ID')
-    auth_args.add_argument('-u', '--username', type=str, help='Rocket.Chat username')
-    auth_args.add_argument('-p', '--password', type=str, help='Rocket.Chat password')
-    # Parse args
-    args = parser.parse_args()
+    # Build parsers
+    main_parser = ArgumentParser(description='Send messages from Zabbix to Rocket.Chat', add_help=True)
+    # Main parser
+    main_parser.add_argument('-v', '--version', action='version', version=VERSION, help='Print version number and exit')
+    main_parser.add_argument('-c', '--config', type=str, default='zbx-rc.conf', help='Path to config file')
+    main_parser.add_argument('--debug', action='store_true', help='Enable debug mode')
 
-    DEBUG = True if args.debug else False
+    # Subparsers
+    subparsers = main_parser.add_subparsers(help='List of options', dest='command')
+    # Authentication to Rocket.Chat
+    auth_parser = subparsers.add_parser('auth', help='Authenticate to Rocket.Chat')
+    auth_parser.add_argument('-u', '--username', type=str, help='Rocket.Chat username')
+    auth_parser.add_argument('-p', '--password', type=str, help='Rocket.Chat password')
+    # Send message
+    send_parser = subparsers.add_parser('send', help='Send message to Rocket.Chat')
+    send_parser.add_argument('to', type=str, help='Message recipient')
+    send_parser.add_argument('subject', type=str, help='Message subject')
+    send_parser.add_argument('message', type=str, help='Message body text')
+    # Parse args
+    args = main_parser.parse_args()
+
+    # Debug mode marker
+    DEBUG = args.debug
 
     # Reading config file
     config = read_config(args.config)
 
-    for section in ['AUTH']:
-        if not config.has_section(section):
-            raise SystemExit('CRITICAL: Config file missing "{}" section'.format(section))
+    for option in ('uid', 'token'):
+        if not config.has_option('RCHAT', option):
+            raise SystemExit('CRITICAL: Config file missing "{}" option'.format(option))
 
     # Rocket.Chat API connection info
     RC_PROTO = config.get('RCHAT', 'protocol', fallback='http')
     RC_SERVER = config.get('RCHAT', 'server', fallback='localhost')
     RC_PORT = config.get('RCHAT', 'port', fallback='3000')
     # Auth info from config
-    RC_UID = config.get('AUTH', 'uid')
-    RC_TOKEN = config.get('AUTH', 'token')
+    RC_UID = config.get('RCHAT', 'uid')
+    RC_TOKEN = config.get('RCHAT', 'token')
 
     API_URL = "{proto}://{server}:{port}/api/v1/".format(proto=RC_PROTO, server=RC_SERVER, port=RC_PORT)
 
@@ -151,10 +153,10 @@ if __name__ == '__main__':
         print('\tToken: {}'.format(RC_TOKEN))
 
     # Auth
-    if args.get_token:
+    if args.command == 'auth':
         auth_data = get_auth(API_URL + 'login', args.username, args.password)
         print("Received auth: id '{}'; token '{}'".format(auth_data[0], auth_data[1]))
 
     # Send message to chat
-    if args.message:
+    if args.command == 'send':
         send_message(API_URL + 'chat.postMessage', RC_UID, RC_TOKEN, to=args.to, msg=args.message, subj=args.subject)
