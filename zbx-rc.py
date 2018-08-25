@@ -27,6 +27,34 @@ def read_config(path):
             raise SystemExit('ERROR: Cannot find "{}" file.'.format(path))
 
 
+def update_config(path, section, values):
+    """
+    Function to update config file.
+
+    :param path: Path to config file
+    :type: str
+    :param section: Config section
+    :type: str
+    :param values: Dict with new values
+    :type: dict
+    :return: True or False
+    :rtype: bool
+    """
+
+    cfg = RawConfigParser()
+
+    if os.path.exists(path):
+        cfg.read(path)
+        for opt, val in values.items():
+            cfg.set(section, opt, val)
+        try:
+            with open(path, 'w') as config_file:
+                cfg.write(config_file)
+                return True
+        except PermissionError:
+            return False
+
+
 def get_auth(url, login, password):
     """
     Function get authentication token and user ID from Rocket.Chat.
@@ -74,11 +102,13 @@ def send_message(url, uid, token, to, msg, subj):
     """
 
     if DEBUG:
-        print('\nSending message info:')
-        print('\tSending API URL: {}'.format(url))
-        print('\tRecipient name: {}'.format(to))
-        print('\tSending subject: {}'.format(subj))
-        print('\tSending message: {}'.format(msg))
+        print("""
+    Sending message info:
+        Sending API URL: {}
+        Recipient name: {}
+        Sending subject: {}
+        Sending message: {}
+        """.format(url, to, subj, msg))
 
     headers = {'X-Auth-Token': token, 'X-User-Id': uid, 'Content-Type': 'application/json'}
 
@@ -95,8 +125,6 @@ def send_message(url, uid, token, to, msg, subj):
     resp_json = resp.json()
     if DEBUG:
         print('\tResult: {}'.format(resp_json))
-
-    return True if resp_json['success'] else False
 
 
 if __name__ == '__main__':
@@ -116,6 +144,7 @@ if __name__ == '__main__':
     auth_parser = subparsers.add_parser('auth', help='Authenticate to Rocket.Chat')
     auth_parser.add_argument('-u', '--username', type=str, help='Rocket.Chat username')
     auth_parser.add_argument('-p', '--password', type=str, help='Rocket.Chat password')
+    auth_parser.add_argument('--update', action='store_true', help='Update current config file')
     # Send message
     send_parser = subparsers.add_parser('send', help='Send message to Rocket.Chat')
     send_parser.add_argument('to', type=str, help='Message recipient')
@@ -145,17 +174,23 @@ if __name__ == '__main__':
     API_URL = "{proto}://{server}:{port}/api/v1/".format(proto=RC_PROTO, server=RC_SERVER, port=RC_PORT)
 
     if DEBUG:
-        print('Reading config file...')
-        print('\tUID: {}'.format(RC_UID))
-        print('\tToken: {}'.format(RC_TOKEN))
-        print('\tAPI URL: {}'.format(API_URL))
-        print('\tUID: {}'.format(RC_UID))
-        print('\tToken: {}'.format(RC_TOKEN))
+        print("""
+    Config file:
+        UID: {}
+        Token: {}
+        API URL: {}""".format(RC_UID, RC_TOKEN, API_URL))
+
+    if args.command is None:
+        raise SystemExit("Syntax error: You must provide arguments. Use --help to learn how.")
 
     # Auth
     if args.command == 'auth':
         auth_data = get_auth(API_URL + 'login', args.username, args.password)
-        print("Received auth: id '{}'; token '{}'".format(auth_data[0], auth_data[1]))
+        if args.update:
+            values_to_update = {'uid': auth_data[0], 'token': auth_data[1]}
+            update_config(args.config, 'RCHAT', values_to_update)
+        else:
+            print("id:\t'{}'\ntoken:\t'{}'".format(auth_data[0], auth_data[1]))
 
     # Send message to chat
     if args.command == 'send':
