@@ -53,6 +53,19 @@ Send message to Rocket.Chat
 >**message**     Text body  
 
 ## Usage examples
+Install script to your system. In fact, it's just creates config directory with config example:
+```bash
+[root@server ~]# ./zbx-rc.py install
+INFO: Script installed successfully. Please, correct /etc/zbx-rc/zbx-rc.conf file for your environment.
+[root@server ~]# cat /etc/zbx-rc/zbx-rc.conf
+[RCHAT]
+protocol = http
+server = 10.0.0.1
+port = 3000
+uid = 
+token = 
+```
+
 Authenticate to Rocket.Chat with REST API:
 ```bash
 [root@server ~]# ./zbx-rc.py auth -u 'asand3r' -p 'secretPa$$word'
