@@ -10,6 +10,11 @@ from configparser import RawConfigParser
 def install_script(conf_dir, group):
     """
     Function copies script and config files to needed directories
+
+    :param conf_dir: Path to config directory to create
+    :type: str
+    :param group: Group name to set chown root:group to config directory
+    :type: str
     :return: True or False
     :rtype: bool
     """
@@ -98,16 +103,23 @@ def get_auth(url, login, password):
     :rtype: tuple
     """
 
-    headers = {'Content-Type': 'application/json'}
-    timeout = (1, 3)
-    resp = requests.post(url, headers=headers, json={'username': login, 'password': password}, timeout=timeout)
+    try:
+        headers = {'Content-Type': 'application/json'}
+        timeout = (1, 3)
+        resp = requests.post(url, headers=headers, json={'username': login, 'password': password}, timeout=timeout)
 
-    resp_json = resp.json()
+        resp_json = resp.json()
 
-    if resp_json['status'] == 'success':
-        return resp_json['data']['userId'], resp_json['data']['authToken']
-    else:
-        return resp_json['status'], resp_json['error']
+        if resp_json['status'] == 'success':
+            return resp_json['data']['userId'], resp_json['data']['authToken']
+        else:
+            return resp_json['status'], resp_json['error']
+    except requests.exceptions.SSLError:
+        raise SystemExit('ERROR: Cannot verify SSL Certificate.')
+    except requests.exceptions.ConnectTimeout:
+        raise SystemExit('ERROR: Cannot connect to Rocket.Chat API - connection timeout')
+    except requests.exceptions.ConnectionError as e:
+        raise SystemExit("ERROR: Cannot connect to Rocket.Chat API {}.".format(e))
 
 
 def send_message(url, uid, token, to, msg, subj):
@@ -139,21 +151,24 @@ def send_message(url, uid, token, to, msg, subj):
         Sending message: {}
         """.format(url, to, subj, msg))
 
-    headers = {'X-Auth-Token': token, 'X-User-Id': uid, 'Content-Type': 'application/json'}
-
     if to[0] not in ('@', '#'):
         raise SystemExit('ERROR: Recipient name must stars with "@" or "#" symbol.')
 
-    text_data = """
-    *{}*
-    {}
-    """.format(subj, msg)
-    timeout = (1, 3)
-    resp = requests.post(url, json={'channel': to, 'text': text_data}, headers=headers, timeout=timeout)
-
-    resp_json = resp.json()
-    if DEBUG:
-        print('\tResult: {}'.format(resp_json))
+    try:
+        timeout = (1, 3)
+        headers = {'X-Auth-Token': token, 'X-User-Id': uid, 'Content-Type': 'application/json'}
+        text_data = "*{}*\n{}".format(subj, msg)
+        # Make request
+        resp = requests.post(url, json={'channel': to, 'text': text_data}, headers=headers, timeout=timeout)
+        # Debug
+        if DEBUG:
+            print('\tResult: {}'.format(resp.text))
+    except requests.exceptions.SSLError:
+        raise SystemExit('ERROR: Cannot verify SSL Certificate.')
+    except requests.exceptions.ConnectTimeout:
+        raise SystemExit('ERROR: Cannot connect to Rocket.Chat API - connection timeout')
+    except requests.exceptions.ConnectionError as e:
+        raise SystemExit("ERROR: Cannot connect to Rocket.Chat API {}.".format(e))
 
 
 if __name__ == '__main__':
@@ -182,7 +197,7 @@ if __name__ == '__main__':
     # Install script
     install_parser = subparsers.add_parser('install', help='Prepare script to work')
     install_parser.add_argument('-c', '--conf-dir', type=str, default='/etc/zbx-rc', help='Directory for script config')
-    install_parser.add_argument('-u', '--group', type=str, default='zabbix', help='System group owning config')
+    install_parser.add_argument('-g', '--group', type=str, default='zabbix', help='System group owning config')
     # Parse args
     args = main_parser.parse_args()
 
