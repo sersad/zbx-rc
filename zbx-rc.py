@@ -1,9 +1,41 @@
 #!/usr/bin/env python3
 
 import os
+import grp
 import requests
 from argparse import ArgumentParser
 from configparser import RawConfigParser
+
+
+def install_script(conf_dir, group):
+    """
+    Function copies script and config files to needed directories
+    :return: True or False
+    :rtype: bool
+    """
+
+    conf_file = conf_dir + '/zbx-rc.conf'
+
+    # Create config directory and assign rights
+    if not os.path.exists(conf_dir):
+        os.mkdir(conf_dir, mode=0o640)
+        os.chown(conf_dir, 0, grp.getgrnam(group).gr_gid)
+
+    # Create new config file
+    cfg = RawConfigParser()
+    if not cfg.has_section('RCHT'):
+        cfg.add_section('RCHAT')
+    cfg.set('RCHAT', 'protocol', 'http')
+    cfg.set('RCHAT', 'server', '10.0.0.1')
+    cfg.set('RCHAT', 'port', '3000')
+    cfg.set('RCHAT', 'uid', '')
+    cfg.set('RCHAT', 'token', '')
+
+    # Write file to disk
+    with open(conf_file, 'w') as file:
+        cfg.write(file)
+        os.chmod(conf_file, 0o640)
+        os.chown(conf_file, 0, grp.getgrnam(group).gr_gid)
 
 
 def read_config(path):
@@ -21,10 +53,7 @@ def read_config(path):
         cfg.read(path)
         return cfg
     else:
-        # Creating 'startup_error.log' if config file cannot be open
-        with open('startup_error.log', 'w') as err_file:
-            err_file.write('ERROR: Cannot find "{}" file.\n'.format(path))
-            raise SystemExit('ERROR: Cannot find "{}" file.'.format(path))
+        raise SystemExit('ERROR: Cannot find "{}" file.'.format(path))
 
 
 def update_config(path, section, values):
@@ -129,13 +158,13 @@ def send_message(url, uid, token, to, msg, subj):
 
 if __name__ == '__main__':
     # Current program version
-    VERSION = '0.1alpha1'
+    VERSION = '0.1alpha2'
 
     # Build parsers
     main_parser = ArgumentParser(description='Send messages from Zabbix to Rocket.Chat', add_help=True)
     # Main parser
     main_parser.add_argument('-v', '--version', action='version', version=VERSION, help='Print version number and exit')
-    main_parser.add_argument('-c', '--config', type=str, default='zbx-rc.conf', help='Path to config file')
+    main_parser.add_argument('-c', '--config', type=str, default='/etc/zbx-rc/zbx-rc.conf', help='Path to config file')
     main_parser.add_argument('--debug', action='store_true', help='Enable debug mode')
 
     # Subparsers
@@ -150,48 +179,63 @@ if __name__ == '__main__':
     send_parser.add_argument('to', type=str, help='Message recipient')
     send_parser.add_argument('subject', type=str, help='Message subject')
     send_parser.add_argument('message', type=str, help='Message body text')
+    # Install script
+    install_parser = subparsers.add_parser('install', help='Prepare script to work')
+    install_parser.add_argument('-c', '--conf-dir', type=str, default='/etc/zbx-rc', help='Directory for script config')
+    install_parser.add_argument('-u', '--group', type=str, default='zabbix', help='System group owning config')
     # Parse args
     args = main_parser.parse_args()
 
     # Debug mode marker
     DEBUG = args.debug
 
-    # Reading config file
-    config = read_config(args.config)
-
-    for option in ('uid', 'token'):
-        if not config.has_option('RCHAT', option):
-            raise SystemExit('CRITICAL: Config file missing "{}" option'.format(option))
-
-    # Rocket.Chat API connection info
-    RC_PROTO = config.get('RCHAT', 'protocol', fallback='http')
-    RC_SERVER = config.get('RCHAT', 'server', fallback='localhost')
-    RC_PORT = config.get('RCHAT', 'port', fallback='3000')
-    # Auth info from config
-    RC_UID = config.get('RCHAT', 'uid')
-    RC_TOKEN = config.get('RCHAT', 'token')
-
-    API_URL = "{proto}://{server}:{port}/api/v1/".format(proto=RC_PROTO, server=RC_SERVER, port=RC_PORT)
-
-    if DEBUG:
-        print("""
-    Config file:
-        UID: {}
-        Token: {}
-        API URL: {}""".format(RC_UID, RC_TOKEN, API_URL))
-
+    # Empty argumants
     if args.command is None:
-        raise SystemExit("Syntax error: You must provide arguments. Use --help to learn how.")
+        main_parser.print_help()
 
-    # Auth
-    if args.command == 'auth':
-        auth_data = get_auth(API_URL + 'login', args.username, args.password)
-        if args.update:
-            values_to_update = {'uid': auth_data[0], 'token': auth_data[1]}
-            update_config(args.config, 'RCHAT', values_to_update)
-        else:
-            print("id:\t'{}'\ntoken:\t'{}'".format(auth_data[0], auth_data[1]))
+    # Install
+    if args.command == 'install':
+        c_dir = args.conf_dir.rstrip('/')
+        c_file = c_dir + '/zbx-rc.conf'
+        install_script(c_dir, args.group)
+        print('INFO: Script installed successfully. Please, correct {} file for your environment.'.format(c_file))
+        SystemExit(0)
 
-    # Send message to chat
-    if args.command == 'send':
-        send_message(API_URL + 'chat.postMessage', RC_UID, RC_TOKEN, to=args.to, msg=args.message, subj=args.subject)
+    if args.command in ('auth', 'send'):
+        # Reading config file
+        config = read_config(args.config)
+
+        for option in ('uid', 'token'):
+            if not config.has_option('RCHAT', option):
+                raise SystemExit('CRITICAL: Config file missing "{}" option'.format(option))
+
+        # Rocket.Chat API connection info
+        RC_PROTO = config.get('RCHAT', 'protocol', fallback='http')
+        RC_SERVER = config.get('RCHAT', 'server', fallback='localhost')
+        RC_PORT = config.get('RCHAT', 'port', fallback='3000')
+        # Auth info from config
+        RC_UID = config.get('RCHAT', 'uid')
+        RC_TOKEN = config.get('RCHAT', 'token')
+
+        API_URL = "{proto}://{server}:{port}/api/v1/".format(proto=RC_PROTO, server=RC_SERVER, port=RC_PORT)
+
+        if DEBUG:
+            print("""
+        Config file:
+            UID: {}
+            Token: {}
+            API URL: {}""".format(RC_UID, RC_TOKEN, API_URL))
+
+        # Auth
+        if args.command == 'auth':
+            auth_data = get_auth(API_URL + 'login', args.username, args.password)
+            if args.update:
+                values_to_update = {'uid': auth_data[0], 'token': auth_data[1]}
+                update_config(args.config, 'RCHAT', values_to_update)
+            else:
+                print("id:\t'{}'\ntoken:\t'{}'".format(auth_data[0], auth_data[1]))
+
+        # Send message to chat
+        if args.command == 'send':
+            send_message(API_URL + 'chat.postMessage', RC_UID, RC_TOKEN, to=args.to, msg=args.message,
+                         subj=args.subject)
