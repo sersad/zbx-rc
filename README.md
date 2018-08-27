@@ -32,12 +32,19 @@ Path to config file (default: zbx-rc.conf near executable file)
 Turn on debug output to console
 
 ### Positional:  
+**install**  
+Prepate environment. Create config directory and config example.
+>**-c|--conf-dir**  
+>Path to conig directory (Default: /etc/zbx-rc)  
+>**-g|--group**  
+>System group, who will be own config directory (Default: zabbix)
+
 **auth**  
 Authenticate to Rocket.Chat  
 >**-u|--username**  
 >Rocket.Chat username  
 >**-p|--password**  
->Rocket.Chat password  
+>Rocket.Chat password
 
 **send**  
 Send message to Rocket.Chat  
