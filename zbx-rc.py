@@ -20,27 +20,32 @@ def install_script(conf_dir, group):
     """
 
     conf_file = conf_dir + '/zbx-rc.conf'
+    try:
+        # Create config directory and assign rights
+        if not os.path.exists(conf_dir):
+            # Create new config file
+            cfg = RawConfigParser()
+            cfg.add_section('RCHAT')
+            cfg.set('RCHAT', 'protocol', 'http')
+            cfg.set('RCHAT', 'server', '10.0.0.1')
+            cfg.set('RCHAT', 'port', '3000')
+            cfg.set('RCHAT', 'uid', '')
+            cfg.set('RCHAT', 'token', '')
 
-    # Create config directory and assign rights
-    if not os.path.exists(conf_dir):
-        os.mkdir(conf_dir, mode=0o640)
-        os.chown(conf_dir, 0, grp.getgrnam(group).gr_gid)
+            # Create directory
+            os.mkdir(conf_dir, mode=0o655)
 
-    # Create new config file
-    cfg = RawConfigParser()
-    if not cfg.has_section('RCHT'):
-        cfg.add_section('RCHAT')
-    cfg.set('RCHAT', 'protocol', 'http')
-    cfg.set('RCHAT', 'server', '10.0.0.1')
-    cfg.set('RCHAT', 'port', '3000')
-    cfg.set('RCHAT', 'uid', '')
-    cfg.set('RCHAT', 'token', '')
-
-    # Write file to disk
-    with open(conf_file, 'w') as file:
-        cfg.write(file)
-        os.chmod(conf_file, 0o640)
-        os.chown(conf_file, 0, grp.getgrnam(group).gr_gid)
+            # Write file to disk
+            with open(conf_file, 'w') as file:
+                cfg.write(file)
+                os.chmod(conf_file, 0o640)
+            try:
+                os.chown(conf_dir, 0, grp.getgrnam(group).gr_gid)
+            except KeyError:
+                print('WARNING: Cannot find group "{}" to set rights to "{}". Using "root".'.format(group, conf_dir))
+                os.chown(conf_dir, 0, 0)
+    except PermissionError:
+        raise SystemExit('PERMISSION ERROR: You have no permissions to create "{}" directory.'.format(conf_dir))
 
 
 def read_config(path):
@@ -54,9 +59,15 @@ def read_config(path):
     """
 
     cfg = RawConfigParser()
+
     if os.path.exists(path):
-        cfg.read(path)
-        return cfg
+        try:
+            with open(path, 'r') as file:
+                file.read()
+                cfg.read(path)
+                return cfg
+        except PermissionError:
+            raise SystemExit('ERROR: Cannot read config file "{}".'.format(path))
     else:
         raise SystemExit('ERROR: Cannot find "{}" file.'.format(path))
 
@@ -143,13 +154,11 @@ def send_message(url, uid, token, to, msg, subj):
     """
 
     if DEBUG:
-        print("""
-    Sending message info:
-        Sending API URL: {}
-        Recipient name: {}
-        Sending subject: {}
-        Sending message: {}
-        """.format(url, to, subj, msg))
+        print("Sending message:\n"
+              "\tSending API URL: {}\n"
+              "\tRecipient name: {}\n"
+              "\tSending subject: {}\n"
+              "\tSending message: {}\n".format(url, to, subj, msg))
 
     if to[0] not in ('@', '#'):
         raise SystemExit('ERROR: Recipient name must stars with "@" or "#" symbol.')
@@ -162,7 +171,7 @@ def send_message(url, uid, token, to, msg, subj):
         resp = requests.post(url, json={'channel': to, 'text': text_data}, headers=headers, timeout=timeout)
         # Debug
         if DEBUG:
-            print('\tResult: {}'.format(resp.text))
+            print('Result: {}'.format(resp.text))
     except requests.exceptions.SSLError:
         raise SystemExit('ERROR: Cannot verify SSL Certificate.')
     except requests.exceptions.ConnectTimeout:
@@ -173,7 +182,7 @@ def send_message(url, uid, token, to, msg, subj):
 
 if __name__ == '__main__':
     # Current program version
-    VERSION = '0.1alpha2'
+    VERSION = '0.1alpha3'
 
     # Build parsers
     main_parser = ArgumentParser(description='Send messages from Zabbix to Rocket.Chat', add_help=True)
@@ -220,10 +229,6 @@ if __name__ == '__main__':
         # Reading config file
         config = read_config(args.config)
 
-        for option in ('uid', 'token'):
-            if not config.has_option('RCHAT', option):
-                raise SystemExit('CRITICAL: Config file missing "{}" option'.format(option))
-
         # Rocket.Chat API connection info
         RC_PROTO = config.get('RCHAT', 'protocol', fallback='http')
         RC_SERVER = config.get('RCHAT', 'server', fallback='localhost')
@@ -235,11 +240,7 @@ if __name__ == '__main__':
         API_URL = "{proto}://{server}:{port}/api/v1/".format(proto=RC_PROTO, server=RC_SERVER, port=RC_PORT)
 
         if DEBUG:
-            print("""
-        Config file:
-            UID: {}
-            Token: {}
-            API URL: {}""".format(RC_UID, RC_TOKEN, API_URL))
+            print("Config file:\n\tUID: {}\n\tToken: {}\n\tAPI URL: {}\n".format(RC_UID, RC_TOKEN, API_URL))
 
         # Auth
         if args.command == 'auth':
