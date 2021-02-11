@@ -1,6 +1,7 @@
 # zbx-rc
 Utility to send message from Zabbix into Rocket.Chat.
-![alt](https://pp.userapi.com/c848736/v848736351/646ba/_MNVgbH-Pzk.jpg)
+![alt](http://gogs.mts-nn.ru/s.sadovnikov/zbx-rc-bot/src/master/001.png)
+![alt](http://gogs.mts-nn.ru/s.sadovnikov/zbx-rc-bot/src/master/002.png)
 Zabbix Share page: https://share.zabbix.com/cat-notifications/zabbix-to-rocket-chat  
 
 Program run with Python > 3.4
