@@ -5,35 +5,39 @@ Utility to send message from Zabbix into Rocket.Chat.
 ![alt](http://gogs.mts-nn.ru/s.sadovnikov/zbx-rc-bot/raw/68e2e678f40be1ba9c35fdbf967795884fbe32d5/002.png)
 
 
-Zabbix Share page: https://share.zabbix.com/cat-notifications/zabbix-to-rocket-chat  
 
 Program run with Python > 3.4
 
 **Latest stable versions:** 0.2
 
-Original code: https://github.com/asand3r/zbx-rc/wiki/Configure-media-type-in-Zabbix
-https://share.zabbix.com/cat-notifications/zabbix-to-rocket-chat  
+Original code: 
+https://github.com/asand3r/zbx-rc/wiki/Configure-media-type-in-Zabbix
 
-How to add alert script in Zabbix: https://www.zabbix.com/documentation/3.4/manual/config/notifications/media/script  
-How to install zbx-rc:  
+https://share.zabbix.com/cat-notifications/zabbix-to-rocket-chat 
 
-## Dependencies
+
+How to add alert script in Zabbix: https://www.zabbix.com/documentation/3.4/manual/config/notifications/media/script
+
+
+## How to install zbx-rc:  
+
+### Dependencies
  - requests
 
-## Feautres  
+### Feautres  
 **Common:**
 - [x] Send simple text message
 - [x] HTTPS support
 - [x] Update config file in place
 - [x] Update message if problem resolved (id message get by triggerid/eventid)  
 
-## TODO  
+### TODO  
 - [ ] Attach images to message
 - [ ] Clear old messages 
 
-## Supported arguments  
-### Please, read help message first, it always actual.
-### Common:  
+### Supported arguments  
+#### Please, read help message first, it always actual.
+#### Common:  
 **-h|--help**  
 Print help message  
 **-v|--version**  
@@ -43,7 +47,7 @@ Path to config file (default: zbx-rc.conf near executable file)
 **--debug**  
 Turn on debug output to console
 
-### Positional:  
+#### Positional:  
 **install**  
 Prepate environment. Create config directory and config example.
 >**-c|--conf-dir**  
@@ -64,7 +68,7 @@ Send message to Rocket.Chat
 >**subject**     Subject  
 >**message**     Text body  
 
-## Usage examples
+### Usage examples
 Install script to your system. In fact, it's just creates config directory with config example:
 ```bash
 [root@server ~]# ./zbx-rc.py install
@@ -101,4 +105,4 @@ Use 'send' parameter to send simple text message:
 [root@server ~]# ./zbx-rc.py send '@asand3r' 'PROBLEM: Free space is low (5%)' 'Free space on disk C:\ too low - 5%'
 ```
 
-When using the URL https: // <zabbix> /tr_events.php?triggerid=3349067&eventid=4026100586, the message id with triggerid eventid will be saved in the sqlite database. If a message is received with the same triggerid eventid it will be updated.
+When using the URL https://<zabbix/tr_events.php?triggerid=3349067&eventid=4026100586, the message id with triggerid eventid will be saved in the sqlite database. If a message is received with the same triggerid eventid it will be updated.
