@@ -1,8 +1,8 @@
 # zbx-rc
 Utility to send message from Zabbix into Rocket.Chat.
-![alt](http://gogs.mts-nn.ru/s.sadovnikov/zbx-rc-bot/src/68e2e678f40be1ba9c35fdbf967795884fbe32d5/001.png)
+![alt](http://gogs.mts-nn.ru/s.sadovnikov/zbx-rc-bot/raw/68e2e678f40be1ba9c35fdbf967795884fbe32d5/001.png)
 
-![alt](http://gogs.mts-nn.ru/s.sadovnikov/zbx-rc-bot/src/68e2e678f40be1ba9c35fdbf967795884fbe32d5/002.png)
+![alt](http://gogs.mts-nn.ru/s.sadovnikov/zbx-rc-bot/raw/68e2e678f40be1ba9c35fdbf967795884fbe32d5/002.png)
 
 
 Zabbix Share page: https://share.zabbix.com/cat-notifications/zabbix-to-rocket-chat  
@@ -10,6 +10,7 @@ Zabbix Share page: https://share.zabbix.com/cat-notifications/zabbix-to-rocket-c
 Program run with Python > 3.4
 
 **Latest stable versions:** 0.2
+
 Original code: https://github.com/asand3r/zbx-rc/wiki/Configure-media-type-in-Zabbix
 https://share.zabbix.com/cat-notifications/zabbix-to-rocket-chat  
 
