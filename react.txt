@@ -1,0 +1,4 @@
+curl -H "X-Auth-Token: aTdkHnqPHm6wuTCJrYJkwgkreorTstCery5h-dgPw9z" \
+     -H "X-User-Id: tbC22wqAWbW3wosG8" \
+     -H "Content-type:application/json" \
+     https://rocketchat.mts-nn.ru/api/v1/chat.getMessage?msgId=x5QXCh3ypSFrQX58i

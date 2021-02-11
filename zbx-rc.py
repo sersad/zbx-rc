@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
-
+import configparser
 import os
 import grp
+import re
+import sqlite3
+from pprint import pprint
+
 import requests
 from argparse import ArgumentParser
 from configparser import RawConfigParser
@@ -9,8 +13,19 @@ from configparser import RawConfigParser
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
 requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 
+BLANK_DB = """CREATE TABLE msg (
+                    id         VARCHAR  UNIQUE ON CONFLICT IGNORE
+                                        PRIMARY KEY,
+                    trigger_id INT,
+                    event_id   INT,
+                    timestamp  DATETIME DEFAULT (CURRENT_TIMESTAMP),
+                    rid        VARCHAR
+                );"""
 
-def install_script(conf_dir, group):
+DB_FILE = os.path.dirname(os.path.abspath(__file__)) + "/zbx-rc.sqlite"
+
+
+def install_script(conf_dir: str, group: str):
     """
     Function copies script and config files to needed directories
 
@@ -29,9 +44,9 @@ def install_script(conf_dir, group):
             # Create new config file
             cfg = RawConfigParser()
             cfg.add_section('RCHAT')
-            cfg.set('RCHAT', 'protocol', 'http')
-            cfg.set('RCHAT', 'server', '10.0.0.1')
-            cfg.set('RCHAT', 'port', '3000')
+            cfg.set('RCHAT', 'protocol', 'https')
+            cfg.set('RCHAT', 'server', 'rocketchat.mts-nn.ru')
+            cfg.set('RCHAT', 'port', '443')
             cfg.set('RCHAT', 'uid', '')
             cfg.set('RCHAT', 'token', '')
 
@@ -44,14 +59,16 @@ def install_script(conf_dir, group):
                 os.chmod(conf_file, 0o640)
             try:
                 os.chown(conf_dir, 0, grp.getgrnam(group).gr_gid)
+                return True
             except KeyError:
                 print('WARNING: Cannot find group "{}" to set rights to "{}". Using "root".'.format(group, conf_dir))
                 os.chown(conf_dir, 0, 0)
+                return False
     except PermissionError:
         raise SystemExit('PERMISSION ERROR: You have no permissions to create "{}" directory.'.format(conf_dir))
 
 
-def read_config(path):
+def read_config(path: str) -> configparser.RawConfigParser:
     """
     Function read config file and returns RawConfigParser object.
 
@@ -103,7 +120,7 @@ def update_config(path, section, values):
             return False
 
 
-def get_auth(url, login, password):
+def get_auth(url: str, login: str, password: str) -> tuple:
     """
     Function get authentication token and user ID from Rocket.Chat.
 
@@ -136,7 +153,7 @@ def get_auth(url, login, password):
         raise SystemExit("ERROR: Cannot connect to Rocket.Chat API {}.".format(e))
 
 
-def send_message(url, uid, token, to, msg, subj):
+def send_message(url: str, uid: str, token: str, to: str, msg: str, subj: str) -> bool:
     """
     Function send message to Rocket.Chat.
 
@@ -155,7 +172,6 @@ def send_message(url, uid, token, to, msg, subj):
     :return: True or False
     :rtype: bool
     """
-
     if DEBUG:
         print("Sending message:\n"
               "\tSending API URL: {}\n"
@@ -166,15 +182,47 @@ def send_message(url, uid, token, to, msg, subj):
     if to[0] not in ('@', '#'):
         raise SystemExit('ERROR: Recipient name must stars with "@" or "#" symbol.')
 
+    connection = sqlite3.connect(DB_FILE)
+    cursor = connection.cursor()
+
+    tr_ev = re.findall("triggerid=(\d+)&eventid=(\d+)", msg)
+    if tr_ev:
+        trigger_id, event_id = tr_ev[0]
+        query = "SELECT id, rid FROM msg WHERE event_id = {} AND trigger_id = {}".format(event_id, trigger_id)
+        res = cursor.execute(query).fetchall()
+    else:
+        trigger_id = event_id = None
+        res = None
+
     try:
         timeout = (1, 3)
         headers = {'X-Auth-Token': token, 'X-User-Id': uid, 'Content-Type': 'application/json'}
         text_data = "*{}*\n{}".format(subj, msg)
-        # Make request
-        resp = requests.post(url, json={'channel': to, 'text': text_data}, headers=headers, timeout=timeout)
-        # Debug
-        if DEBUG:
-            print('Result: {}'.format(resp.text))
+
+        if not res:
+            # Make request and send new message
+            resp = requests.post(url + 'chat.postMessage', json={'channel': to, 'text': text_data}, headers=headers, timeout=timeout)
+            if resp:
+                pprint(resp.json())
+                msg_id = resp.json()["message"]["_id"]
+                ts = resp.json()["message"]["ts"] #  '2021-02-10T23:28:49.188Z'
+                rid = resp.json()["message"]["rid"]
+                if event_id and trigger_id:
+                    query_insert = """INSERT INTO msg (id, event_id, trigger_id, rid)
+                                       VALUES ("{}", {}, {}, "{}");""".format(msg_id, event_id, trigger_id, rid)
+                    cursor.execute(query_insert)
+                    connection.commit()
+                # print(to, msg_id, trigger_id, event_id, ts)
+            # Debug
+            if DEBUG:
+                print('Result: {}'.format(resp.text))
+        else:
+            # Make request and update message
+            msg_id, rid = res[0]
+            resp = requests.post(url + "chat.update", json={"msgId": msg_id, 'roomId': rid, 'text': text_data}, headers=headers, timeout=timeout)
+            # print(resp.json())
+
+        connection.close()
     except requests.exceptions.SSLError:
         raise SystemExit('ERROR: Cannot verify SSL Certificate.')
     except requests.exceptions.ConnectTimeout:
@@ -183,15 +231,36 @@ def send_message(url, uid, token, to, msg, subj):
         raise SystemExit("ERROR: Cannot connect to Rocket.Chat API {}.".format(e))
 
 
+def check_db() -> None:
+    """
+    Проверяет что База работает. Если не работает или битая, удаляет файл и создает снова чистую базу
+    Пример пустой базы в виде SQL в BLANK_DB
+    :return: None
+    """
+    query = """SELECT * FROM msg"""
+    try:
+        connection = sqlite3.connect(DB_FILE)
+        connection.cursor().execute(query).fetchall()
+        connection.close()
+    except:
+        if os.path.exists(DB_FILE):
+            os.remove(DB_FILE)
+        connection = sqlite3.connect(DB_FILE)
+        cursor = connection.cursor()
+        cursor.execute(BLANK_DB)
+        connection.commit()
+        connection.close()
+
+
 if __name__ == '__main__':
     # Current program version
-    VERSION = '0.1alpha3'
+    VERSION = '0.2'
 
     # Build parsers
     main_parser = ArgumentParser(description='Send messages from Zabbix to Rocket.Chat', add_help=True)
     # Main parser
     main_parser.add_argument('-v', '--version', action='version', version=VERSION, help='Print version number and exit')
-    main_parser.add_argument('-c', '--config', type=str, default='/etc/zbx-rc/zbx-rc.conf', help='Path to config file')
+    main_parser.add_argument('-c', '--config', type=str, default=os.path.dirname(os.path.abspath(__file__)) + '/zbx-rc/zbx-rc.conf', help='Path to config file')
     main_parser.add_argument('--debug', action='store_true', help='Enable debug mode')
 
     # Subparsers
@@ -208,7 +277,7 @@ if __name__ == '__main__':
     send_parser.add_argument('message', type=str, help='Message body text')
     # Install script
     install_parser = subparsers.add_parser('install', help='Prepare script to work')
-    install_parser.add_argument('-c', '--conf-dir', type=str, default='/etc/zbx-rc', help='Directory for script config')
+    install_parser.add_argument('-c', '--conf-dir', type=str, default='zbx-rc', help='Directory for script config')
     install_parser.add_argument('-g', '--group', type=str, default='zabbix', help='System group owning config')
     # Parse args
     args = main_parser.parse_args()
@@ -242,6 +311,9 @@ if __name__ == '__main__':
 
         API_URL = "{proto}://{server}:{port}/api/v1/".format(proto=RC_PROTO, server=RC_SERVER, port=RC_PORT)
 
+        # check DB
+        check_db()
+
         if DEBUG:
             print("Config file:\n\tUID: {}\n\tToken: {}\n\tAPI URL: {}\n".format(RC_UID, RC_TOKEN, API_URL))
 
@@ -256,5 +328,5 @@ if __name__ == '__main__':
 
         # Send message to chat
         if args.command == 'send':
-            send_message(API_URL + 'chat.postMessage', RC_UID, RC_TOKEN, to=args.to, msg=args.message,
+            send_message(API_URL, RC_UID, RC_TOKEN, to=args.to, msg=args.message,
                          subj=args.subject)
