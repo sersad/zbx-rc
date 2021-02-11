@@ -22,7 +22,10 @@ BLANK_DB = """CREATE TABLE msg (
                     rid        VARCHAR
                 );"""
 
-DB_FILE = os.path.dirname(os.path.abspath(__file__)) + "/zbx-rc.sqlite"
+
+# DB_FILE = os.path.dirname(os.path.abspath(__file__)) + "/zbx-rc.sqlite"
+DB_DIR = "/opt/zbx-rc/"
+DB_FILE = DB_DIR + "zbx-rc.sqlite"
 
 
 def install_script(conf_dir: str, group: str):
@@ -231,7 +234,7 @@ def send_message(url: str, uid: str, token: str, to: str, msg: str, subj: str) -
         raise SystemExit("ERROR: Cannot connect to Rocket.Chat API {}.".format(e))
 
 
-def check_db() -> None:
+def check_db(group: str = "zabbix") -> None:
     """
     Проверяет что База работает. Если не работает или битая, удаляет файл и создает снова чистую базу
     Пример пустой базы в виде SQL в BLANK_DB
@@ -245,6 +248,16 @@ def check_db() -> None:
     except:
         if os.path.exists(DB_FILE):
             os.remove(DB_FILE)
+        else:
+            # Create directory
+            if not os.path.exists(DB_DIR):
+                os.mkdir(DB_DIR, mode=0o655)
+            try:
+                os.chown(DB_DIR, 0, grp.getgrnam().gr_gid)
+            except KeyError:
+                print('WARNING: Cannot find group "{}" to set rights to "{}". Using "root".'.format(group, conf_dir))
+                os.chown(DB_DIR, 0, 0)
+                return False
         connection = sqlite3.connect(DB_FILE)
         cursor = connection.cursor()
         cursor.execute(BLANK_DB)
