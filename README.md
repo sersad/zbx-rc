@@ -1,13 +1,17 @@
 # zbx-rc
 Utility to send message from Zabbix into Rocket.Chat.
-![alt](http://gogs.mts-nn.ru/s.sadovnikov/zbx-rc-bot/src/master/001.png)
-![alt](http://gogs.mts-nn.ru/s.sadovnikov/zbx-rc-bot/src/master/002.png)
+![alt](http://gogs.mts-nn.ru/s.sadovnikov/zbx-rc-bot/src/68e2e678f40be1ba9c35fdbf967795884fbe32d5/001.png)
+
+![alt](http://gogs.mts-nn.ru/s.sadovnikov/zbx-rc-bot/src/68e2e678f40be1ba9c35fdbf967795884fbe32d5/002.png)
+
+
 Zabbix Share page: https://share.zabbix.com/cat-notifications/zabbix-to-rocket-chat  
 
 Program run with Python > 3.4
 
 **Latest stable versions:** 0.2
-original code: https://github.com/asand3r/zbx-rc/wiki/Configure-media-type-in-Zabbix
+Original code: https://github.com/asand3r/zbx-rc/wiki/Configure-media-type-in-Zabbix
+https://share.zabbix.com/cat-notifications/zabbix-to-rocket-chat  
 
 How to add alert script in Zabbix: https://www.zabbix.com/documentation/3.4/manual/config/notifications/media/script  
 How to install zbx-rc:  
