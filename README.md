@@ -3,12 +3,13 @@ Utility to send message from Zabbix into Rocket.Chat.
 ![alt](https://pp.userapi.com/c848736/v848736351/646ba/_MNVgbH-Pzk.jpg)
 Zabbix Share page: https://share.zabbix.com/cat-notifications/zabbix-to-rocket-chat  
 
-Program wrote with Python 3.6.
+Program run with Python > 3.4
 
-**Latest stable versions:** 0.1alpha3
+**Latest stable versions:** 0.2
+original code: https://github.com/asand3r/zbx-rc/wiki/Configure-media-type-in-Zabbix
 
 How to add alert script in Zabbix: https://www.zabbix.com/documentation/3.4/manual/config/notifications/media/script  
-How to install zbx-rc: https://github.com/asand3r/zbx-rc/wiki/Configure-media-type-in-Zabbix
+How to install zbx-rc:  
 
 ## Dependencies
  - requests
@@ -18,8 +19,11 @@ How to install zbx-rc: https://github.com/asand3r/zbx-rc/wiki/Configure-media-ty
 - [x] Send simple text message
 - [x] HTTPS support
 - [x] Update config file in place
+- [x] Update message if problem resolved (id message get by triggerid/eventid)  
+
 ## TODO  
 - [ ] Attach images to message
+- [ ] Clear old messages 
 
 ## Supported arguments  
 ### Please, read help message first, it always actual.
@@ -59,14 +63,22 @@ Install script to your system. In fact, it's just creates config directory with 
 ```bash
 [root@server ~]# ./zbx-rc.py install
 INFO: Script installed successfully. Please, correct /etc/zbx-rc/zbx-rc.conf file for your environment.
-[root@server ~]# cat /etc/zbx-rc/zbx-rc.conf
+[root@server ~]# cat ./zbx-rc/zbx-rc.conf
 [RCHAT]
-protocol = http
-server = 10.0.0.1
-port = 3000
+protocol = https
+server = rocketchat.mts-nn.ru
+port = 443
 uid = 
 token = 
 ```
+
+At startup, it will check if there is a database along the path 
+```bash
+/opt/zbx-rc/
+```
+and if not, it will be created. 
+If an error occurs with rights, run the script with root rights. 
+If it fails, create a directory '/opt/zbx-rc/' and give write permissions to the user/group the zabbix. 
 
 Authenticate to Rocket.Chat with REST API:
 ```bash
@@ -82,3 +94,5 @@ Use 'send' parameter to send simple text message:
 ```bash
 [root@server ~]# ./zbx-rc.py send '@asand3r' 'PROBLEM: Free space is low (5%)' 'Free space on disk C:\ too low - 5%'
 ```
+
+When using the URL https: // <zabbix> /tr_events.php?triggerid=3349067&eventid=4026100586, the message id with triggerid eventid will be saved in the sqlite database. If a message is received with the same triggerid eventid it will be updated.
