@@ -156,7 +156,7 @@ def get_auth(url: str, login: str, password: str) -> tuple:
         raise SystemExit("ERROR: Cannot connect to Rocket.Chat API {}.".format(e))
 
 
-def send_message(url: str, uid: str, token: str, to: str, msg: str, subj: str) -> bool:
+def send_message(url: str, uid: str, token: str, to: str, msg: str, subj: str) -> None:
     """
     Function send message to Rocket.Chat.
 
@@ -191,7 +191,7 @@ def send_message(url: str, uid: str, token: str, to: str, msg: str, subj: str) -
     tr_ev = re.findall("triggerid=(\d+)&eventid=(\d+)", msg)
     if tr_ev:
         trigger_id, event_id = tr_ev[0]
-        query = "SELECT id, rid FROM msg WHERE event_id = {} AND trigger_id = {}".format(event_id, trigger_id)
+        query = "SELECT id, rid FROM msg WHERE event_id = {} AND trigger_id = {};".format(event_id, trigger_id)
         res = cursor.execute(query).fetchall()
     else:
         trigger_id = event_id = None
@@ -208,7 +208,7 @@ def send_message(url: str, uid: str, token: str, to: str, msg: str, subj: str) -
             if resp:
                 pprint(resp.json())
                 msg_id = resp.json()["message"]["_id"]
-                ts = resp.json()["message"]["ts"] #  '2021-02-10T23:28:49.188Z'
+                # ts = resp.json()["message"]["ts"] #  '2021-02-10T23:28:49.188Z'
                 rid = resp.json()["message"]["rid"]
                 if event_id and trigger_id:
                     query_insert = """INSERT INTO msg (id, event_id, trigger_id, rid)
@@ -234,7 +234,7 @@ def send_message(url: str, uid: str, token: str, to: str, msg: str, subj: str) -
         raise SystemExit("ERROR: Cannot connect to Rocket.Chat API {}.".format(e))
 
 
-def check_db(group: str = "zabbix") -> None:
+def check_db(group: str = "zabbix") -> bool:
     """
     Проверяет что База работает. Если не работает или битая, удаляет файл и создает снова чистую базу
     Пример пустой базы в виде SQL в BLANK_DB
@@ -245,6 +245,7 @@ def check_db(group: str = "zabbix") -> None:
         connection = sqlite3.connect(DB_FILE)
         connection.cursor().execute(query).fetchall()
         connection.close()
+        return True
     except:
         if os.path.exists(DB_FILE):
             os.remove(DB_FILE)
@@ -255,7 +256,7 @@ def check_db(group: str = "zabbix") -> None:
             try:
                 os.chown(DB_DIR, 0, grp.getgrnam().gr_gid)
             except KeyError:
-                print('WARNING: Cannot find group "{}" to set rights to "{}". Using "root".'.format(group, conf_dir))
+                print('WARNING: Cannot find group "{}" to set rights to "{}". Using "root".'.format(group, DB_DIR))
                 os.chown(DB_DIR, 0, 0)
                 return False
         connection = sqlite3.connect(DB_FILE)
