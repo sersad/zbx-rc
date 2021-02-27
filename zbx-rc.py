@@ -1,17 +1,21 @@
 #!/usr/bin/env python3
 import configparser
-import os
 import grp
+import logging
+import os
 import re
 import sqlite3
-from pprint import pprint
-
-import requests
 from argparse import ArgumentParser
 from configparser import RawConfigParser
 
+import requests
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
+
+from zbx_graph_get import graph_get
+
 requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
+
+logging.basicConfig(level=logging.ERROR)
 
 BLANK_DB = """CREATE TABLE msg (
                     id         VARCHAR  UNIQUE ON CONFLICT IGNORE
@@ -21,7 +25,6 @@ BLANK_DB = """CREATE TABLE msg (
                     timestamp  DATETIME DEFAULT (CURRENT_TIMESTAMP),
                     rid        VARCHAR
                 );"""
-
 
 # DB_FILE = os.path.dirname(os.path.abspath(__file__)) + "/zbx-rc.sqlite"
 DB_DIR = "/opt/zbx-rc/"
@@ -39,7 +42,6 @@ def install_script(conf_dir: str, group: str):
     :return: True or False
     :rtype: bool
     """
-
     conf_file = conf_dir + '/zbx-rc.conf'
     try:
         # Create config directory and assign rights
@@ -52,6 +54,12 @@ def install_script(conf_dir: str, group: str):
             cfg.set('RCHAT', 'port', '443')
             cfg.set('RCHAT', 'uid', '')
             cfg.set('RCHAT', 'token', '')
+            # Zabbix API connection info
+            cfg.add_section("ZABBIX")
+            cfg.set("ZABBIX", "zbx_server", "http://zabbix")
+            cfg.set("ZABBIX", "zbx_api_user", "user")
+            cfg.set("ZABBIX", "zbx_api_pass", "password")
+            cfg.set("ZABBIX", "zbx_tmp_dir", "/tmp")
 
             # Create directory
             os.mkdir(conf_dir, mode=0o655)
@@ -80,9 +88,7 @@ def read_config(path: str) -> configparser.RawConfigParser:
     :return: configparser.RawConfigParser object
     :rtype: configparser.RawConfigParser
     """
-
     cfg = RawConfigParser()
-
     if os.path.exists(path):
         try:
             with open(path, 'r') as file:
@@ -108,9 +114,7 @@ def update_config(path, section, values):
     :return: True or False
     :rtype: bool
     """
-
     cfg = RawConfigParser()
-
     if os.path.exists(path):
         cfg.read(path)
         for opt, val in values.items():
@@ -156,9 +160,19 @@ def get_auth(url: str, login: str, password: str) -> tuple:
         raise SystemExit("ERROR: Cannot connect to Rocket.Chat API {}.".format(e))
 
 
-def send_message(url: str, uid: str, token: str, to: str, msg: str, subj: str) -> None:
+def send_message(url: str,
+                 uid: str,
+                 token: str,
+                 to: str,
+                 msg: str,
+                 subj: str,
+                 zbx_server: str,
+                 zbx_api_user: str,
+                 zbx_api_pass: str,
+                 zbx_tmp_dir: str) -> None:
     """
     Function send message to Rocket.Chat.
+
 
     :param url: Rocket.Chat API url for sending message
     :type: str
@@ -172,15 +186,29 @@ def send_message(url: str, uid: str, token: str, to: str, msg: str, subj: str) -
     :type: str
     :param subj: Message subject
     :type: str
+    :param zbx_server: zabbix url
+    :type: str
+    :param zbx_api_user: zabbix user
+    :type: str
+    :param zbx_api_pass: zabbix password
+    :type: str
+    :param zbx_tmp_dir: tmp dir for img
+    :type: str
     :return: True or False
     :rtype: bool
     """
+
     if DEBUG:
         print("Sending message:\n"
               "\tSending API URL: {}\n"
               "\tRecipient name: {}\n"
               "\tSending subject: {}\n"
               "\tSending message: {}\n".format(url, to, subj, msg))
+    logging.info("Sending message:\n"
+                 "\tSending API URL: {}\n"
+                 "\tRecipient name: {}\n"
+                 "\tSending subject: {}\n"
+                 "\tSending message: {}\n".format(url, to, subj, msg))
 
     if to[0] not in ('@', '#'):
         raise SystemExit('ERROR: Recipient name must stars with "@" or "#" symbol.')
@@ -189,6 +217,20 @@ def send_message(url: str, uid: str, token: str, to: str, msg: str, subj: str) -
     cursor = connection.cursor()
 
     tr_ev = re.findall("triggerid=(\d+)&eventid=(\d+)", msg)
+    # get item id from msg
+    itemid = re.findall("zbx;itemid:(\d+)", msg)
+    # get img from zabbix
+    if itemid:
+        file = graph_get(itemid,
+                         subj,
+                         zbx_server,
+                         zbx_api_user,
+                         zbx_api_pass,
+                         zbx_tmp_dir)
+        msg = re.sub(r"zbx;itemid:(\d+)", ' ', msg)
+    else:
+        file = None
+
     if tr_ev:
         trigger_id, event_id = tr_ev[0]
         query = "SELECT id, rid FROM msg WHERE event_id = {} AND trigger_id = {};".format(event_id, trigger_id)
@@ -204,28 +246,46 @@ def send_message(url: str, uid: str, token: str, to: str, msg: str, subj: str) -
 
         if not res:
             # Make request and send new message
-            resp = requests.post(url + 'chat.postMessage', json={'channel': to, 'text': text_data}, headers=headers, timeout=timeout)
+            resp = requests.post(url + 'chat.postMessage', json={'channel': to, 'text': text_data}, headers=headers,
+                                 timeout=timeout)
             if resp:
-                pprint(resp.json())
                 msg_id = resp.json()["message"]["_id"]
                 # ts = resp.json()["message"]["ts"] #  '2021-02-10T23:28:49.188Z'
                 rid = resp.json()["message"]["rid"]
                 if event_id and trigger_id:
-                    query_insert = """INSERT INTO msg (id, event_id, trigger_id, rid)
-                                       VALUES ("{}", {}, {}, "{}");""".format(msg_id, event_id, trigger_id, rid)
+                    query_insert = """INSERT INTO msg (id, event_id, trigger_id, rid) VALUES ("{}", {}, {}, "{}");""".format(
+                        msg_id, event_id, trigger_id, rid)
                     cursor.execute(query_insert)
                     connection.commit()
-                # print(to, msg_id, trigger_id, event_id, ts)
+                logging.info("to={}, msg_id={}, trigger_id={}, event_id={}".format(to, msg_id, trigger_id, event_id))
+
+                # send image if get rid
+                if file:
+                    with open(file, 'rb') as img:
+                        name_img = os.path.basename(file)
+                        files = {'file': (name_img, img, 'image/png')}
+                        with requests.Session() as s:
+                            del headers['Content-Type']
+                            r = s.post(url + "rooms.upload/" + rid, files=files,
+                                       headers=headers)
+                            print(r.json())
+
+                    os.remove(file)
+
             # Debug
+            logging.info('Result: {}'.format(resp.text))
             if DEBUG:
                 print('Result: {}'.format(resp.text))
         else:
             # Make request and update message
             msg_id, rid = res[0]
-            resp = requests.post(url + "chat.update", json={"msgId": msg_id, 'roomId': rid, 'text': text_data}, headers=headers, timeout=timeout)
-            # print(resp.json())
+            resp = requests.post(url + "chat.update", json={"msgId": msg_id, 'roomId': rid, 'text': text_data},
+                                 headers=headers, timeout=timeout)
 
+        # logging.info("resp.url=", resp.url)
+        # logging.info("resp.json=", resp.json())
         connection.close()
+
     except requests.exceptions.SSLError:
         raise SystemExit('ERROR: Cannot verify SSL Certificate.')
     except requests.exceptions.ConnectTimeout:
@@ -274,7 +334,9 @@ if __name__ == '__main__':
     main_parser = ArgumentParser(description='Send messages from Zabbix to Rocket.Chat', add_help=True)
     # Main parser
     main_parser.add_argument('-v', '--version', action='version', version=VERSION, help='Print version number and exit')
-    main_parser.add_argument('-c', '--config', type=str, default=os.path.dirname(os.path.abspath(__file__)) + '/zbx-rc/zbx-rc.conf', help='Path to config file')
+    main_parser.add_argument('-c', '--config', type=str,
+                             default=os.path.dirname(os.path.abspath(__file__)) + '/zbx-rc/zbx-rc.conf',
+                             help='Path to config file')
     main_parser.add_argument('--debug', action='store_true', help='Enable debug mode')
 
     # Subparsers
@@ -323,6 +385,12 @@ if __name__ == '__main__':
         RC_UID = config.get('RCHAT', 'uid')
         RC_TOKEN = config.get('RCHAT', 'token')
 
+        # Zabbix API connection info
+        zbx_server = config.get("ZABBIX", "zbx_server")
+        zbx_api_user = config.get("ZABBIX", "zbx_api_user")
+        zbx_api_pass = config.get("ZABBIX", "zbx_api_pass")
+        zbx_tmp_dir = config.get("ZABBIX", "zbx_tmp_dir")
+
         API_URL = "{proto}://{server}:{port}/api/v1/".format(proto=RC_PROTO, server=RC_SERVER, port=RC_PORT)
 
         # check DB
@@ -342,5 +410,13 @@ if __name__ == '__main__':
 
         # Send message to chat
         if args.command == 'send':
-            send_message(API_URL, RC_UID, RC_TOKEN, to=args.to, msg=args.message,
-                         subj=args.subject)
+            send_message(url=API_URL,
+                         uid=RC_UID,
+                         token=RC_TOKEN,
+                         to=args.to,
+                         msg=args.message,
+                         subj=args.subject,
+                         zbx_server=zbx_server,
+                         zbx_api_user=zbx_api_user,
+                         zbx_api_pass=zbx_api_pass,
+                         zbx_tmp_dir=zbx_tmp_dir)
