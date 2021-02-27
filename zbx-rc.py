@@ -173,7 +173,6 @@ def send_message(url: str,
     """
     Function send message to Rocket.Chat.
 
-
     :param url: Rocket.Chat API url for sending message
     :type: str
     :param uid: Rocket.Chat user ID who sending message
