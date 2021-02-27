@@ -11,7 +11,7 @@ from configparser import RawConfigParser
 import requests
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
 
-from zbx_graph_get import graph_get
+from zbxgraphget import graph_get
 
 requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 
