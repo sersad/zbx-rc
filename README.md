@@ -8,7 +8,7 @@ Utility to send message from Zabbix into Rocket.Chat.
 
 Program run with Python > 3.4
 
-**Latest stable versions:** 0.2
+**Latest stable versions:** 0.3
 
 Original code: 
 https://github.com/asand3r/zbx-rc/wiki/Configure-media-type-in-Zabbix
@@ -30,9 +30,9 @@ How to add alert script in Zabbix: https://www.zabbix.com/documentation/3.4/manu
 - [x] HTTPS support
 - [x] Update config file in place
 - [x] Update message if problem resolved (id message get by triggerid/eventid)  
+- [x] Attach images to message
 
 ### TODO  
-- [ ] Attach images to message
 - [ ] Clear old messages 
 
 ### Supported arguments  
@@ -80,7 +80,25 @@ server = rocketchat.mts-nn.ru
 port = 443
 uid = 
 token = 
+[ZABBIX]
+zbx_server = https://zabbix
+zbx_api_user = user
+zbx_api_pass = password
+zbx_api_verify = False
+zbx_tmp_dir = /tmp
 ```
+
+Graphs get by template in messages
+```
+zbx;itemid:(\d+)
+```
+In action messages must be
+```
+zbx;itemid:{ITEM.ID1}
+```
+to send graph
+
+
 
 At startup, it will check if there is a database along the path 
 ```bash
